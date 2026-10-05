@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: bkk_flood_backend
+    restart: unless-stopped
+    ports:
+      - "5001:5001"
+    environment:
+      - PORT=5001
+      - NODE_ENV=production
+      - DATA_REFRESH_INTERVAL=30000
+      - CACHE_TTL_SECONDS=30
+      - DB_TYPE=sqlite
+      - DB_PATH=/app/data/bangkok_flood.sqlite
+      - CORS_ORIGIN=*
+    volumes:
+      - flood_data:/app/data
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: bkk_flood_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  flood_data:

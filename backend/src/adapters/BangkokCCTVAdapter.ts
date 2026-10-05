@@ -1,0 +1,148 @@
+import http from 'http';
+import https from 'https';
+import { BaseAdapter } from './BaseAdapter';
+import { CCTVPoint } from '../types/models';
+
+export class BangkokCCTVAdapter extends BaseAdapter<CCTVPoint[]> {
+  readonly name = 'กล้อง CCTV สาธารณะ กรุงเทพมหานคร (BMA Traffic & Flood CCTV)';
+  readonly key = 'bangkok_cctv';
+  readonly url = 'http://www.bmatraffic.com/index.aspx';
+
+  async fetch(): Promise<CCTVPoint[]> {
+    const start = performance.now();
+    try {
+      const cameras: CCTVPoint[] = [];
+
+      // 1. Fetch BMA Traffic Cameras (518 locations)
+      try {
+        const bmaHtml = await this.httpGet('http://www.bmatraffic.com/index.aspx');
+        const trafficCCTVs = this.parseBMATrafficCameras(bmaHtml);
+        cameras.push(...trafficCCTVs);
+      } catch (e: any) {
+        console.warn(`[BangkokCCTVAdapter] Warning fetching bmatraffic.com: ${e.message}`);
+      }
+
+      // 2. Fetch BMA Flood Camera Profiles from Directus (if available)
+      try {
+        const floodCameras = await this.fetchFloodCameras();
+        cameras.push(...floodCameras);
+      } catch (e: any) {
+        console.warn(`[BangkokCCTVAdapter] Warning fetching flood camera profiles: ${e.message}`);
+      }
+
+      if (cameras.length === 0) {
+        throw new Error('No CCTV cameras retrieved from upstream sources');
+      }
+
+      this.updateHealthSuccess(cameras.length, performance.now() - start);
+      return cameras;
+    } catch (err: any) {
+      this.updateHealthFailure(err.message, performance.now() - start);
+      throw err;
+    }
+  }
+
+  private parseBMATrafficCameras(html: string): CCTVPoint[] {
+    const pos = html.indexOf('var locations = [');
+    if (pos === -1) return [];
+
+    const end = html.indexOf('];', pos);
+    if (end === -1) return [];
+
+    const code = html.substring(pos, end + 2);
+    try {
+      const fn = new Function(`${code}; return locations;`);
+      const rawLocations = fn() as Array<any>;
+      const checkedAt = new Date().toISOString();
+
+      return rawLocations.map((loc) => {
+        const id = String(loc[0]);
+        const name = String(loc[1] || loc[3] || `กล้อง BMA #${id}`);
+        const nameEn = loc[2] && loc[2] !== '-' ? String(loc[2]) : undefined;
+        const road = loc[3] && loc[3] !== '-' ? String(loc[3]) : undefined;
+        const lat = Number(loc[5]) || 0;
+        const lng = Number(loc[6]) || 0;
+
+        return {
+          id: `cctv_bma_${id}`,
+          name,
+          nameEn,
+          latitude: lat,
+          longitude: lng,
+          road,
+          streamType: 'snapshot',
+          streamUrl: `http://www.bmatraffic.com/PlayVideo.aspx?ID=${id}`,
+          snapshotUrl: `http://www.bmatraffic.com/show.aspx?image=${id}`,
+          sourceUrl: `http://www.bmatraffic.com/PlayVideo.aspx?ID=${id}`,
+          lastCheckedAt: checkedAt,
+          isOnline: true,
+          source: 'สำนักการจราจรและขนส่ง กรุงเทพมหานคร (BMA Traffic)'
+        };
+      });
+    } catch (err) {
+      console.error('[BangkokCCTVAdapter] Error parsing locations array:', err);
+      return [];
+    }
+  }
+
+  private async fetchFloodCameras(): Promise<CCTVPoint[]> {
+    const url = 'https://floodbangkok.bangkok.go.th/bkk/dds/services/api/floods/v1/items/camera_profile?limit=100&fields=id,CameraName,ThingName,LiveStream,Lat,Long,camera_description';
+    const jsonStr = await this.httpsGet(url);
+    const json = JSON.parse(jsonStr);
+    if (!json.data || !Array.isArray(json.data)) return [];
+
+    const checkedAt = new Date().toISOString();
+    return json.data
+      .filter((c: any) => c.Lat && c.Long)
+      .map((c: any) => ({
+        id: `cctv_flood_${c.id || c.CameraName}`,
+        name: c.camera_description ? `กล้องตรวจน้ำท่วม: ${c.camera_description}` : `กล้องตรวจน้ำท่วม (${c.CameraName})`,
+        latitude: Number(c.Lat) || 0,
+        longitude: Number(c.Long) || 0,
+        streamType: 'external',
+        streamUrl: c.LiveStream || undefined,
+        sourceUrl: 'https://floodbangkok.bangkok.go.th/',
+        lastCheckedAt: checkedAt,
+        isOnline: true,
+        source: 'ศูนย์ควบคุมระบบป้องกันน้ำท่วม สำนักการระบายน้ำ กทม.'
+      }));
+  }
+
+  private httpGet(targetUrl: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const req = http.get(targetUrl, { timeout: 12000 }, (res) => {
+        if (res.statusCode && res.statusCode >= 400) {
+          reject(new Error(`HTTP ${res.statusCode} from ${targetUrl}`));
+          return;
+        }
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => resolve(data));
+      });
+      req.on('error', reject);
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error(`Timeout fetching ${targetUrl}`));
+      });
+    });
+  }
+
+  private httpsGet(targetUrl: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const req = https.get(targetUrl, { rejectUnauthorized: false, timeout: 12000 }, (res) => {
+        if (res.statusCode && res.statusCode >= 400) {
+          reject(new Error(`HTTP ${res.statusCode} from ${targetUrl}`));
+          return;
+        }
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => resolve(data));
+      });
+      req.on('error', reject);
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error(`Timeout fetching ${targetUrl}`));
+      });
+    });
+  }
+}

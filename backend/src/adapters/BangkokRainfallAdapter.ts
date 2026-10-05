@@ -1,0 +1,86 @@
+import https from 'https';
+import { BaseAdapter } from './BaseAdapter';
+import { RainPoint } from '../types/models';
+
+export class BangkokRainfallAdapter extends BaseAdapter<RainPoint[]> {
+  readonly name = 'สถานีวัดปริมาณน้ำฝน (BMA Rainfall Stations)';
+  readonly key = 'bangkok_rainfall';
+  readonly url = 'https://bmasedgis.bangkok.go.th/sedgis/rest/services/Hosted/%E0%B8%AA%E0%B8%96%E0%B8%B2%E0%B8%99%E0%B8%B5%E0%B8%A7%E0%B8%B1%E0%B8%94%E0%B8%9B%E0%B8%A3%E0%B8%B4%E0%B8%A1%E0%B8%B2%E0%B8%93%E0%B8%99%E0%B9%89%E0%B8%B3%E0%B8%9D%E0%B8%99/FeatureServer/0/query?where=1%3D1&outFields=*&returnGeometry=true&f=json';
+
+  async fetch(): Promise<RainPoint[]> {
+    const start = performance.now();
+    try {
+      const response = await this.httpGet(this.url);
+      const json = JSON.parse(response);
+
+      if (!json.features || !Array.isArray(json.features)) {
+        throw new Error('Invalid ArcGIS response format: missing features array');
+      }
+
+      const fetchedAt = new Date().toISOString();
+      const points: RainPoint[] = json.features.map((f: any) => {
+        const attr = f.attributes || {};
+        const measuredAt = attr.site_time || fetchedAt;
+
+        let dataAgeSeconds = 0;
+        try {
+          const measuredDate = new Date(measuredAt).getTime();
+          if (!isNaN(measuredDate)) {
+            dataAgeSeconds = Math.max(0, Math.round((Date.now() - measuredDate) / 1000));
+          }
+        } catch {
+          dataAgeSeconds = 0;
+        }
+
+        return {
+          id: `rain_${attr.code || attr.objectid}`,
+          code: attr.code || '',
+          name: attr.name || 'สถานีวัดน้ำฝน',
+          district: attr.district || undefined,
+          rf5min: Number(attr.rf5min) || 0,
+          rf15min: Number(attr.rf15min) || 0,
+          rf30min: Number(attr.rf30min) || 0,
+          rf1hr: Number(attr.rf1hr) || 0,
+          rf3hr: Number(attr.rf3hr) || 0,
+          rf6hr: Number(attr.rf6hr) || 0,
+          rf12hr: Number(attr.rf12hr) || 0,
+          rf24hr: Number(attr.rf24hr) || 0,
+          status: attr.status || 'ปกติ',
+          latitude: attr.latitude || 0,
+          longitude: attr.longitude || 0,
+          source: 'สำนักการระบายน้ำ กรุงเทพมหานคร (BMA Drainage Department)',
+          sourceUrl: 'https://weather.bangkok.go.th/rain/',
+          measuredAt,
+          fetchedAt,
+          dataAgeSeconds,
+          isOnline: attr.status !== 'ขัดข้อง'
+        };
+      });
+
+      this.updateHealthSuccess(points.length, performance.now() - start);
+      return points;
+    } catch (err: any) {
+      this.updateHealthFailure(err.message, performance.now() - start);
+      throw err;
+    }
+  }
+
+  private httpGet(targetUrl: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const req = https.get(targetUrl, { rejectUnauthorized: false, timeout: 15000 }, (res) => {
+        if (res.statusCode && res.statusCode >= 400) {
+          reject(new Error(`HTTP ${res.statusCode} from ${targetUrl}`));
+          return;
+        }
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => resolve(data));
+      });
+      req.on('error', reject);
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error(`Timeout fetching ${targetUrl}`));
+      });
+    });
+  }
+}

@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CCTV Source Readiness Test - Bangkok Flood Monitor</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --border: #334155;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --primary: #3b82f6;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 24px;
+      line-height: 1.5;
+    }
+    header {
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    h1 { font-size: 24px; font-weight: 700; margin-bottom: 6px; }
+    .subtitle { color: var(--text-muted); font-size: 14px; }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .metric-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .metric-val { font-size: 28px; font-weight: 700; color: var(--text); }
+    .metric-lbl { font-size: 13px; color: var(--text-muted); }
+    h2 { font-size: 18px; margin: 24px 0 12px; color: #38bdf8; display: flex; align-items: center; gap: 8px; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .cam-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .cam-header {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+    }
+    .cam-title { font-weight: 600; font-size: 14px; color: var(--text); }
+    .cam-id { font-size: 12px; color: var(--text-muted); font-family: monospace; }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .badge-success { background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid #22c55e; }
+    .badge-warning { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid #f59e0b; }
+    .badge-danger { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid #ef4444; }
+    .media-container {
+      background: #000;
+      position: relative;
+      width: 100%;
+      height: 240px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    video, img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .meta-list {
+      padding: 12px 14px;
+      font-size: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      background: #182234;
+      flex: 1;
+    }
+    .meta-row { display: flex; justify-content: space-between; }
+    .meta-label { color: var(--text-muted); }
+    .meta-value { color: var(--text); font-family: monospace; }
+    .status-text {
+      padding: 8px 14px;
+      font-size: 12px;
+      background: #0f172a;
+      border-top: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+    .failure-box {
+      background: #2b1115;
+      border: 1px solid #7f1d1d;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 24px;
+    }
+    .failure-box h3 { color: #f87171; font-size: 15px; margin-bottom: 8px; }
+  </style>
+  <script src="./hls.min.js"></script>
+</head>
+<body>
+  <header>
+    <h1>Bangkok CCTV Source Readiness Test</h1>
+    <div class="subtitle">ผลการทดสอบการแสดงผลกล้องสด (HLS & JPEG) ในเบราว์เซอร์จริงตามเกณฑ์ข้อกำหนด Phase 1</div>
+  </header>
+
+  <div class="summary-grid">
+    <div class="metric-card">
+      <div class="metric-val" id="metric-hls-bkk">22</div>
+      <div class="metric-lbl">HLS Streams กทม. (CORS Enabled)</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-val" id="metric-jpeg-bkk">4</div>
+      <div class="metric-lbl">JPEG ภาพสด กทม. (Unique Image)</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-val" style="color: var(--warning);">29</div>
+      <div class="metric-lbl">JPEG Placeholder ไม่ส่งภาพจริง (ถูกคัดออก)</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-val" style="color: var(--danger);">0</div>
+      <div class="metric-lbl">DWR / BMA Open Data ผ่านเกณฑ์</div>
+    </div>
+  </div>
+
+  <h2>
+    <span>🎥</span>
+    <span>1. รายการกล้อง HLS วิดีโอสดในกรุงเทพฯ (ทดสอบเล่นจริงผ่าน Hls.js)</span>
+  </h2>
+  <div class="grid" id="hls-grid">
+    <!-- HLS Item 1 -->
+    <div class="cam-card">
+      <div class="cam-header">
+        <div>
+          <div class="cam-title">รพ.บางปะกอก 9 (สุขสวัสดิ์)</div>
+          <div class="cam-id">ITICM_BMAMI0293</div>
+        </div>
+        <span class="badge badge-success" id="badge-hls-1">TESTING</span>
+      </div>
+      <div class="media-container">
+        <video id="video-1" controls muted autoplay playsinline></video>
+      </div>
+      <div class="meta-list">
+        <div class="meta-row"><span class="meta-label">Protocol / CORS:</span><span class="meta-value">HTTPS / CORS: *</span></div>
+        <div class="meta-row"><span class="meta-label">Stream URL:</span><span class="meta-value">camera1.itic.../10.8.0.22_8555.m3u8</span></div>
+        <div class="meta-row"><span class="meta-label">พิกัด (Lat, Lng):</span><span class="meta-value">13.681598, 100.475303</span></div>
+        <div class="meta-row"><span class="meta-label">เวลาถ่ายภาพ:</span><span class="meta-value">Live HLS Stream (Timestamp ในภาพ)</span></div>
+      </div>
+      <div class="status-text" id="status-hls-1">กำลังเริ่มเล่นสตรีม...</div>
+    </div>
+
+    <!-- HLS Item 2 -->
+    <div class="cam-card">
+      <div class="cam-header">
+        <div>
+          <div class="cam-title">Big C วงศ์สว่าง</div>
+          <div class="cam-id">ITICM_BMAMI0165</div>
+        </div>
+        <span class="badge badge-success" id="badge-hls-2">TESTING</span>
+      </div>
+      <div class="media-container">
+        <video id="video-2" controls muted autoplay playsinline></video>
+      </div>
+      <div class="meta-list">
+        <div class="meta-row"><span class="meta-label">Protocol / CORS:</span><span class="meta-value">HTTPS / CORS: *</span></div>
+        <div class="meta-row"><span class="meta-label">Stream URL:</span><span class="meta-value">camerai1.itic.../charlie-new-tran-10.m3u8</span></div>
+        <div class="meta-row"><span class="meta-label">พิกัด (Lat, Lng):</span><span class="meta-value">13.827772, 100.527880</span></div>
+        <div class="meta-row"><span class="meta-label">เวลาถ่ายภาพ:</span><span class="meta-value">Live HLS Stream</span></div>
+      </div>
+      <div class="status-text" id="status-hls-2">กำลังเริ่มเล่นสตรีม...</div>
+    </div>
+
+    <!-- HLS Item 3 -->
+    <div class="cam-card">
+      <div class="cam-header">
+        <div>
+          <div class="cam-title">เชิงสะพานตากสิน ฝั่งสาทร มุ่งหน้าถนนสาทร</div>
+          <div class="cam-id">ITICM_BMAMI0081</div>
+        </div>
+        <span class="badge badge-success" id="badge-hls-3">TESTING</span>
+      </div>
+      <div class="media-container">
+        <video id="video-3" controls muted autoplay playsinline></video>
+      </div>
+      <div class="meta-list">
+        <div class="meta-row"><span class="meta-label">Protocol / CORS:</span><span class="meta-value">HTTPS / CORS: *</span></div>
+        <div class="meta-row"><span class="meta-label">Stream URL:</span><span class="meta-value">camera1.itic.../10.8.0.18_8001.m3u8</span></div>
+        <div class="meta-row"><span class="meta-label">พิกัด (Lat, Lng):</span><span class="meta-value">13.718309, 100.516079</span></div>
+        <div class="meta-row"><span class="meta-label">เวลาถ่ายภาพ:</span><span class="meta-value">Live HLS Stream</span></div>
+      </div>
+      <div class="status-text" id="status-hls-3">กำลังเริ่มเล่นสตรีม...</div>
+    </div>
+
+    <!-- HLS Item 4 -->
+    <div class="cam-card">
+      <div class="cam-header">
+        <div>
+          <div class="cam-title">ถ.พระราม 4 แยกทางด่วนพระราม 4</div>
+          <div class="cam-id">ITICM_BMAMI0071</div>
+        </div>
+        <span class="badge badge-success" id="badge-hls-4">TESTING</span>
+      </div>
+      <div class="media-container">
+        <video id="video-4" controls muted autoplay playsinline></video>
+      </div>
+      <div class="meta-list">
+        <div class="meta-row"><span class="meta-label">Protocol / CORS:</span><span class="meta-value">HTTPS / CORS: *</span></div>
+        <div class="meta-row"><span class="meta-label">Stream URL:</span><span class="meta-value">camera1.itic.../10.8.0.14_8002.m3u8</span></div>
+        <div class="meta-row"><span class="meta-label">พิกัด (Lat, Lng):</span><span class="meta-value">13.723090, 100.552203</span></div>
+        <div class="meta-row"><span class="meta-label">เวลาถ่ายภาพ:</span><span class="meta-value">Live HLS Stream</span></div>
+      </div>
+      <div class="status-text" id="status-hls-4">กำลังเริ่มเล่นสตรีม...</div>
+    </div>
+  </div>
+
+  <h2>
+    <span>📷</span>
+    <span>2. รายการกล้องภาพนิ่ง JPEG สดในกรุงเทพฯ (ทดสอบโหลดผ่าน &lt;img&gt;)</span>
+  </h2>
+  <div class="grid" id="jpeg-grid">
+    <!-- JPEG Item 1 -->
+    <div class="cam-card">
+      <div class="cam-header">
+        <div>
+          <div class="cam-title">ถ.พระราม4 แยกทางด่วนพระราม4 (มุม 1)</div>
+          <div class="cam-id">ITICM_BMAMI0071</div>
+        </div>
+        <span class="badge badge-success" id="badge-img-1">LOADING</span>
+      </div>
+      <div class="media-container">
+        <img id="img-1" src="https://camera1.iticfoundation.org/jpeg2.php?camid=10.8.0.14:8002" alt="0071">
+      </div>
+      <div class="meta-list">
+        <div class="meta-row"><span class="meta-label">Content-Type:</span><span class="meta-value">image/jpeg (~53 KB)</span></div>
+        <div class="meta-row"><span class="meta-label">Hash Status:</span><span class="meta-value">Unique (ภาพจริง ไม่ใช่ Placeholder)</span></div>
+        <div class="meta-row"><span class="meta-label">พิกัด (Lat, Lng):</span><span class="meta-value">13.723090, 100.552203</span></div>
+        <div class="meta-row"><span class="meta-label">เวลาถ่ายภาพ:</span><span class="meta-value">มี OSD บนภาพ / ไม่มี Last-Modified</span></div>
+      </div>
+      <div class="status-text" id="status-img-1">กำลังโหลดภาพ...</div>
+    </div>
+
+    <!-- JPEG Item 2 -->
+    <div class="cam-card">
+      <div class="cam-header">
+        <div>
+          <div class="cam-title">ทางด่วน แยกทางด่วนพระราม4 (มุม 2)</div>
+          <div class="cam-id">ITICM_BMAMI0072</div>
+        </div>
+        <span class="badge badge-success" id="badge-img-2">LOADING</span>
+      </div>
+      <div class="media-container">
+        <img id="img-2" src="https://camera1.iticfoundation.org/jpeg2.php?camid=10.8.0.14:8003" alt="0072">
+      </div>
+      <div class="meta-list">
+        <div class="meta-row"><span class="meta-label">Content-Type:</span><span class="meta-value">image/jpeg (~32 KB)</span></div>
+        <div class="meta-row"><span class="meta-label">Hash Status:</span><span class="meta-value">Unique (ภาพจริง ไม่ใช่ Placeholder)</span></div>
+        <div class="meta-row"><span class="meta-label">พิกัด (Lat, Lng):</span><span class="meta-value">13.722570, 100.553284</span></div>
+        <div class="meta-row"><span class="meta-label">เวลาถ่ายภาพ:</span><span class="meta-value">มี OSD บนภาพ / ไม่มี Last-Modified</span></div>
+      </div>
+      <div class="status-text" id="status-img-2">กำลังโหลดภาพ...</div>
+    </div>
+
+    <!-- JPEG Item 3 -->
+    <div class="cam-card">
+      <div class="cam-header">
+        <div>
+          <div class="cam-title">ถ.พระราม4 แยกทางด่วนพระราม4 (มุม 3)</div>
+          <div class="cam-id">ITICM_BMAMI0074</div>
+        </div>
+        <span class="badge badge-success" id="badge-img-3">LOADING</span>
+      </div>
+      <div class="media-container">
+        <img id="img-3" src="https://camera1.iticfoundation.org/jpeg2.php?camid=10.8.0.14:8001" alt="0074">
+      </div>
+      <div class="meta-list">
+        <div class="meta-row"><span class="meta-label">Content-Type:</span><span class="meta-value">image/jpeg (~55 KB)</span></div>
+        <div class="meta-row"><span class="meta-label">Hash Status:</span><span class="meta-value">Unique (ภาพจริง ไม่ใช่ Placeholder)</span></div>
+        <div class="meta-row"><span class="meta-label">พิกัด (Lat, Lng):</span><span class="meta-value">13.723356, 100.551694</span></div>
+        <div class="meta-row"><span class="meta-label">เวลาถ่ายภาพ:</span><span class="meta-value">มี OSD บนภาพ / ไม่มี Last-Modified</span></div>
+      </div>
+      <div class="status-text" id="status-img-3">กำลังโหลดภาพ...</div>
+    </div>
+
+    <!-- JPEG Item 4 -->
+    <div class="cam-card">
+      <div class="cam-header">
+        <div>
+          <div class="cam-title">ถนนสาทรหน้าสถานทูตเยอรมนี</div>
+          <div class="cam-id">ITICM_BMAMI0076</div>
+        </div>
+        <span class="badge badge-success" id="badge-img-4">LOADING</span>
+      </div>
+      <div class="media-container">
+        <img id="img-4" src="https://camera1.iticfoundation.org/jpeg2.php?camid=10.8.0.15:8002" alt="0076">
+      </div>
+      <div class="meta-list">
+        <div class="meta-row"><span class="meta-label">Content-Type:</span><span class="meta-value">image/jpeg (~53 KB)</span></div>
+        <div class="meta-row"><span class="meta-label">Hash Status:</span><span class="meta-value">Unique (ภาพจริง ไม่ใช่ Placeholder)</span></div>
+        <div class="meta-row"><span class="meta-label">พิกัด (Lat, Lng):</span><span class="meta-value">13.725388, 100.542599</span></div>
+        <div class="meta-row"><span class="meta-label">เวลาถ่ายภาพ:</span><span class="meta-value">มี OSD บนภาพ / ไม่มี Last-Modified</span></div>
+      </div>
+      <div class="status-text" id="status-img-4">กำลังโหลดภาพ...</div>
+    </div>
+  </div>
+
+  <h2>
+    <span>❌</span>
+    <span>3. ตัวอย่างกรณีทดสอบที่ไม่ผ่านเกณฑ์ (คัดออก ไม่นำเข้าแอป)</span>
+  </h2>
+  <div class="failure-box">
+    <h3>3.1 กล้อง JPEG Placeholder (29 กล้องใน Longdo คืนภาพเดียวกันขนาด 3,070 Bytes ซ้ำกัน)</h3>
+    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
+      ตัวอย่าง: ITICM_BMAMI0080 (เชิงสะพานตากสิน) - ระบบตรวจพบ SHA-256 ซ้ำกันกับอีก 28 กล้อง (d896d151...) ขนาด 3,070 bytes จึงถูกตัดออกทันที
+    </p>
+    <div style="display: flex; gap: 16px; align-items: center;">
+      <div style="width: 160px; height: 120px; background: #000; border: 1px solid var(--border); overflow: hidden;">
+        <img src="https://camera1.iticfoundation.org/jpeg2.php?camid=10.8.0.18:8002" style="width: 100%; height: 100%; object-fit: contain;">
+      </div>
+      <div style="font-size: 13px; color: var(--text-muted);">
+        <div><strong>สถานะ:</strong> ปฏิเสธ (ภาพ Placeholder ไม่มีเนื้อหาการจราจรจริง)</div>
+        <div><strong>ตรวจจับโดย:</strong> Hash Deduplication & Minimum Variance Filter</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="failure-box">
+    <h3>3.2 DWR กรมทรัพยากรน้ำ (ติด Authentication ห้าม bypass)</h3>
+    <p style="font-size: 13px; color: var(--text-muted);">
+      - Endpoint รูปถ่าย <code>POST https://telemetry.dwr.go.th/api/image/cctv</code> คืนรหัส <strong>HTTP 403 Forbidden</strong> เมื่อไม่มี JWT Token จากระบบล็อกอินภายใน<br>
+      - ลิงก์ตรงกล้อง Axis คืนรหัส <strong>HTTP 401 Unauthorized</strong> (Digest Auth) และมี credential ฝังใน URL ซึ่งเบราว์เซอร์สมัยใหม่บล็อก
+    </p>
+  </div>
+
+  <div class="failure-box">
+    <h3>3.3 data.bangkok.go.th (bma-cctv)</h3>
+    <p style="font-size: 13px; color: var(--text-muted);">
+      ชุดข้อมูลเปิดมีเพียงไฟล์ CSV ระบุตำแหน่งพิกัด 239 จุด ไม่มี URL สำหรับดึงภาพหรือสตรีมวิดีโอ
+    </p>
+  </div>
+
+  <script>
+    // Test HLS streams
+    const hlsStreams = [
+      { id: "video-1", badge: "badge-hls-1", status: "status-hls-1", url: "https://camera1.iticfoundation.org/hls/10.8.0.22_8555.m3u8" },
+      { id: "video-2", badge: "badge-hls-2", status: "status-hls-2", url: "https://camerai1.iticfoundation.org/hls/charlie-new-tran-10.m3u8" },
+      { id: "video-3", badge: "badge-hls-3", status: "status-hls-3", url: "https://camera1.iticfoundation.org/hls/10.8.0.18_8001.m3u8" },
+      { id: "video-4", badge: "badge-hls-4", status: "status-hls-4", url: "https://camera1.iticfoundation.org/hls/10.8.0.14_8002.m3u8" }
+    ];
+
+    hlsStreams.forEach(stream => {
+      const video = document.getElementById(stream.id);
+      const badge = document.getElementById(stream.badge);
+      const status = document.getElementById(stream.status);
+
+      if (Hls.isSupported()) {
+        const hls = new Hls({ enableWorker: false });
+        hls.loadSource(stream.url);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, function() {
+          video.play().then(() => {
+            badge.className = "badge badge-success";
+            badge.innerText = "ONLINE (HLS)";
+            status.innerText = "กำลังเล่นสตรีมสดสำเร็จ (" + video.videoWidth + "x" + video.videoHeight + ")";
+          }).catch(e => {
+            badge.className = "badge badge-warning";
+            badge.innerText = "AUTOPLAY BLOCKED";
+            status.innerText = "สตรีมพร้อมเล่น (รอผู้ใช้กดคลิก): " + e.message;
+          });
+        });
+        hls.on(Hls.Events.ERROR, function(event, data) {
+          if (data.fatal) {
+            badge.className = "badge badge-danger";
+            badge.innerText = "STREAM ERROR";
+            status.innerText = "สตรีมขัดข้อง: " + data.type + " " + data.details;
+          }
+        });
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = stream.url;
+        video.addEventListener('loadedmetadata', function() {
+          video.play();
+          badge.className = "badge badge-success";
+          badge.innerText = "ONLINE (NATIVE)";
+          status.innerText = "กำลังเล่นสตรีมสด (Native Safari)";
+        });
+      }
+    });
+
+    // Test JPEGs
+    [1, 2, 3, 4].forEach(i => {
+      const img = document.getElementById('img-' + i);
+      const badge = document.getElementById('badge-img-' + i);
+      const status = document.getElementById('status-img-' + i);
+
+      img.onload = () => {
+        if (img.naturalWidth > 100) {
+          badge.className = "badge badge-success";
+          badge.innerText = "ONLINE (JPEG)";
+          status.innerText = "โหลดภาพสำเร็จ: " + img.naturalWidth + "x" + img.naturalHeight + " px";
+        } else {
+          badge.className = "badge badge-warning";
+          badge.innerText = "TOO SMALL";
+          status.innerText = "ขนาดภาพเล็กผิดปกติ: " + img.naturalWidth + "x" + img.naturalHeight;
+        }
+      };
+      img.onerror = () => {
+        badge.className = "badge badge-danger";
+        badge.innerText = "LOAD FAILED";
+        status.innerText = "ไม่สามารถโหลดรูปภาพได้";
+      };
+    });
+  </script>
+</body>
+</html>
