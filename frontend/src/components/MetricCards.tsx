@@ -1,7 +1,6 @@
 import React from 'react';
 import { Waves, Droplets, CloudRain, Camera, Thermometer, Wind } from 'lucide-react';
 import { FloodPoint, WaterLevelPoint, RainPoint, CCTVPoint, WeatherData } from '../types';
-
 import { STALE_THRESHOLD_SECONDS } from '../config/flood.config';
 
 interface MetricCardsProps {
@@ -32,7 +31,6 @@ export const MetricCards: React.FC<MetricCardsProps> = ({
 
   const activeFloods = floodPoints.filter(f => f.waterLevelCm > 0 && isFresh(f));
   const staleFloodsCount = floodPoints.filter(f => f.waterLevelCm > 0 && !isFresh(f)).length;
-  const criticalFloods = activeFloods.filter(f => f.calculatedSeverity === 'HIGH' || f.calculatedSeverity === 'CRITICAL');
   const alertWaterLevels = waterLevels.filter(w => w.calculatedSeverity !== 'NORMAL');
   const maxRain1hr = rainfall.length > 0 ? Math.max(...rainfall.map(r => r.rf1hr)) : 0;
   const rainingStations = rainfall.filter(r => r.rf1hr > 0);
@@ -42,9 +40,18 @@ export const MetricCards: React.FC<MetricCardsProps> = ({
       
       {/* 1. Road Flood Points */}
       <div 
+        role="button"
+        tabIndex={0}
         onClick={() => onSelectCategory && onSelectCategory('flood')}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onSelectCategory && onSelectCategory('flood');
+          }
+        }}
+        aria-label={`ข้อมูลน้ำท่วมถนน: พบน้ำท่วมสด ${activeFloods.length} จุด จากทั้งหมด ${floodPoints.length} จุด คลิกเพื่อดูรายละเอียด`}
         title="คลิกเพื่อดูจุดน้ำท่วมถนนบนแผนที่"
-        className={`p-4 rounded-xl border transition-all cursor-pointer hover:shadow-md hover:border-blue-400 dark:hover:border-blue-500 active:scale-[0.98] ${
+        className={`p-4 rounded-xl border transition-all cursor-pointer hover:shadow-md hover:border-blue-400 dark:hover:border-blue-500 active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-blue-500 ${
           activeFloods.length > 0
             ? 'bg-rose-50/50 border-rose-200 dark:bg-rose-950/20 dark:border-rose-900/50'
             : 'bg-white border-slate-200 dark:bg-slate-900 dark:border-slate-800'
@@ -77,9 +84,18 @@ export const MetricCards: React.FC<MetricCardsProps> = ({
 
       {/* 2. Canal Water Level Stations */}
       <div 
+        role="button"
+        tabIndex={0}
         onClick={() => onSelectCategory && onSelectCategory('waterLevel')}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onSelectCategory && onSelectCategory('waterLevel');
+          }
+        }}
+        aria-label={`ข้อมูลระดับน้ำในคลอง: ทั้งหมด ${waterLevels.length} สถานี เฝ้าระวัง ${alertWaterLevels.length} จุด คลิกเพื่อดูรายละเอียด`}
         title="คลิกเพื่อดูระดับน้ำในคลองบนแผนที่"
-        className="p-4 rounded-xl bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 transition-all cursor-pointer hover:shadow-md hover:border-cyan-400 dark:hover:border-cyan-500 active:scale-[0.98]"
+        className="p-4 rounded-xl bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 transition-all cursor-pointer hover:shadow-md hover:border-cyan-400 dark:hover:border-cyan-500 active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-cyan-500"
       >
         <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
           <span className="text-xs font-medium">ระดับน้ำในคลอง</span>
@@ -108,9 +124,18 @@ export const MetricCards: React.FC<MetricCardsProps> = ({
 
       {/* 3. Rainfall Stations */}
       <div 
+        role="button"
+        tabIndex={0}
         onClick={() => onSelectCategory && onSelectCategory('rainfall')}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onSelectCategory && onSelectCategory('rainfall');
+          }
+        }}
+        aria-label={`ข้อมูลสถานีวัดฝน: ฝนสูงสุด ${maxRain1hr} มม./ชม. มีฝนตก ${rainingStations.length} จุด คลิกเพื่อดูรายละเอียด`}
         title="คลิกเพื่อดูสถานีวัดฝนบนแผนที่"
-        className="p-4 rounded-xl bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 transition-all cursor-pointer hover:shadow-md hover:border-indigo-400 dark:hover:border-indigo-500 active:scale-[0.98]"
+        className="p-4 rounded-xl bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 transition-all cursor-pointer hover:shadow-md hover:border-indigo-400 dark:hover:border-indigo-500 active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-indigo-500"
       >
         <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
           <span className="text-xs font-medium">สถานีวัดฝน</span>
@@ -137,9 +162,18 @@ export const MetricCards: React.FC<MetricCardsProps> = ({
 
       {/* 4. Public CCTV Cameras */}
       <div 
+        role="button"
+        tabIndex={0}
         onClick={() => onSelectCategory && onSelectCategory('cctv')}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onSelectCategory && onSelectCategory('cctv');
+          }
+        }}
+        aria-label={`ข้อมูลกล้อง CCTV สาธารณะ: ทั้งหมด ${cctv.length} กล้อง คลิกเพื่อดูรายละเอียด`}
         title="คลิกเพื่อดูกล้อง CCTV บนแผนที่"
-        className="p-4 rounded-xl bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 transition-all cursor-pointer hover:shadow-md hover:border-emerald-400 dark:hover:border-emerald-500 active:scale-[0.98]"
+        className="p-4 rounded-xl bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 transition-all cursor-pointer hover:shadow-md hover:border-emerald-400 dark:hover:border-emerald-500 active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-emerald-500"
       >
         <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
           <span className="text-xs font-medium">กล้อง CCTV</span>
@@ -180,7 +214,7 @@ export const MetricCards: React.FC<MetricCardsProps> = ({
             </div>
           </div>
         ) : (
-          <div className="text-xs text-slate-400 mt-2">กำลังโหลดสภาพอากาศ...</div>
+          <div className="text-xs text-slate-400">กำลังเชื่อมต่อ...</div>
         )}
       </div>
 

@@ -56,7 +56,9 @@ export const SystemStatusModal: React.FC<SystemStatusModalProps> = ({
 
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+            aria-label="ปิดหน้าต่างสถานะระบบ (ESC)"
+            title="ปิดหน้าต่างสถานะระบบ (ESC)"
+            className="min-w-[44px] min-h-[44px] flex items-center justify-center p-2.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <X className="w-5 h-5" />
           </button>

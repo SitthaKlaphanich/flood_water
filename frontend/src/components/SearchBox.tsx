@@ -114,8 +114,9 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
             setIsOpen(true);
           }}
           onFocus={() => setIsOpen(true)}
+          aria-label="ค้นหาสถานที่ ถนน หรือเขตในกรุงเทพมหานคร"
           placeholder="ค้นหาสถานที่, ถนน, เขต เช่น ลาดกระบัง, บางนา, สุขุมวิท..."
-          className="w-full pl-10 pr-9 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+          className="w-full min-h-[44px] pl-10 pr-10 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
         />
         <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5 pointer-events-none" />
         {query && (
@@ -124,7 +125,8 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
               setQuery('');
               setIsOpen(false);
             }}
-            className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+            aria-label="ล้างคำค้นหา"
+            className="absolute right-1.5 top-1 min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <X className="w-4 h-4" />
           </button>
@@ -133,12 +135,18 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
 
       {/* Autocomplete Dropdown */}
       {isOpen && filteredItems.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-50 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800 max-h-80 overflow-y-auto">
+        <div 
+          role="listbox"
+          aria-label="ผลการค้นหาสถานที่"
+          className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-50 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800 max-h-80 overflow-y-auto"
+        >
           {filteredItems.map(item => (
             <button
               key={item.id}
+              role="option"
+              aria-selected="false"
               onClick={() => handleSelect(item)}
-              className="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 flex items-start gap-3 transition"
+              className="w-full text-left px-4 py-3 min-h-[44px] hover:bg-slate-50 dark:hover:bg-slate-800/60 flex items-start gap-3 transition focus:outline-none focus:bg-blue-50 dark:focus:bg-blue-950/40"
             >
               <MapPin className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
               <div>
@@ -157,13 +165,14 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
       )}
 
       {/* Quick Location Pills */}
-      <div className="flex items-center gap-1.5 mt-2 overflow-x-auto pb-1 text-xs no-scrollbar">
+      <div className="flex items-center gap-1.5 mt-2 overflow-x-auto pb-1 text-xs no-scrollbar" aria-label="สถานที่ค้นหายอดนิยม">
         <span className="text-slate-400 text-[11px] whitespace-nowrap">ยอดนิยม:</span>
         {BANGKOK_LOCATIONS.slice(0, 6).map(loc => (
           <button
             key={loc.id}
             onClick={() => handleQuickChip(loc)}
-            className="px-2 py-0.5 rounded-full bg-slate-200/70 hover:bg-blue-100 hover:text-blue-700 dark:bg-slate-800 dark:hover:bg-blue-900/40 dark:text-slate-300 dark:hover:text-blue-300 transition whitespace-nowrap text-[11px]"
+            aria-label={`เลือกพื้นที่ ${loc.name}`}
+            className="min-h-[36px] px-2.5 py-1.5 rounded-full bg-slate-200/70 hover:bg-blue-100 hover:text-blue-700 dark:bg-slate-800 dark:hover:bg-blue-900/40 dark:text-slate-300 dark:hover:text-blue-300 transition whitespace-nowrap text-[11px] focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             {loc.name.split(' ')[0]}
           </button>

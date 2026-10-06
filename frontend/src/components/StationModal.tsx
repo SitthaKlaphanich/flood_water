@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { X, ExternalLink, Activity, Clock, MapPin, TrendingUp, TrendingDown, Minus, Camera, AlertCircle, Info, Database } from 'lucide-react';
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine, ReferenceArea } from 'recharts';
 import { FloodPoint, WaterLevelPoint, HistoricalRecord, CCTVPoint } from '../types';
 import { getSeverityConfig } from '../utils/severity';
 import { formatDateTime, formatDataAge, formatTimeOnly } from '../utils/formatters';
@@ -86,6 +86,65 @@ export const StationModal: React.FC<StationModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [station, onClose]);
 
+  // Structure chart data with real time scale and gaps > 15 minutes
+  const { chartData, gaps } = useMemo(() => {
+    if (!history || history.length === 0) return { chartData: [], gaps: [] };
+
+    // Sort ascending by time
+    const sorted = [...history]
+      .map(h => ({
+        timestampMs: new Date(h.timestamp).getTime(),
+        timestamp: h.timestamp,
+        value: h.value
+      }))
+      .filter(h => !isNaN(h.timestampMs))
+      .sort((a, b) => a.timestampMs - b.timestampMs);
+
+    const GAP_THRESHOLD_MS = 15 * 60 * 1000; // 15 mins
+    const detectedGaps: { startMs: number; endMs: number; startLabel: string; endLabel: string }[] = [];
+    const formattedData: { timestampMs: number; time: string; fullTime: string; value: number | null; isGap?: boolean }[] = [];
+
+    for (let i = 0; i < sorted.length; i++) {
+      const cur = sorted[i];
+      if (i > 0) {
+        const prev = sorted[i - 1];
+        const diff = cur.timestampMs - prev.timestampMs;
+        if (diff > GAP_THRESHOLD_MS) {
+          detectedGaps.push({
+            startMs: prev.timestampMs,
+            endMs: cur.timestampMs,
+            startLabel: formatTimeOnly(prev.timestamp),
+            endLabel: formatTimeOnly(cur.timestamp)
+          });
+          // Insert null point so line is disconnected across the gap
+          formattedData.push({
+            timestampMs: prev.timestampMs + 1000,
+            time: formatTimeOnly(new Date(prev.timestampMs + 1000)),
+            fullTime: formatDateTime(new Date(prev.timestampMs + 1000)),
+            value: null,
+            isGap: true
+          });
+        }
+      }
+
+      formattedData.push({
+        timestampMs: cur.timestampMs,
+        time: formatTimeOnly(cur.timestamp),
+        fullTime: formatDateTime(cur.timestamp),
+        value: cur.value
+      });
+    }
+
+    return { chartData: formattedData, gaps: detectedGaps };
+  }, [history]);
+
+  const availableHours = useMemo(() => {
+    const startTimeStr = firstRecordedAt || station?.measuredAt;
+    if (!startTimeStr) return 0;
+    const diffMs = Date.now() - new Date(startTimeStr).getTime();
+    return Math.max(0, diffMs / (1000 * 3600));
+  }, [firstRecordedAt, station?.measuredAt]);
+
   if (!station) return null;
 
   const severity = getSeverityConfig(station.calculatedSeverity);
@@ -142,16 +201,9 @@ export const StationModal: React.FC<StationModalProps> = ({
     }
   };
 
-  // Format chart data
-  const chartData = history.map(h => ({
-    time: formatTimeOnly(h.timestamp),
-    fullTime: formatDateTime(h.timestamp),
-    value: h.value
-  }));
-
   const initialRecordDisplay = firstRecordedAt
     ? formatDateTime(firstRecordedAt)
-    : (station.measuredAt ? formatDateTime(station.measuredAt) : 'ไม่มีข้อมูล');
+    : (station?.measuredAt ? formatDateTime(station.measuredAt) : 'ไม่มีข้อมูล');
 
   return (
     <div 
@@ -182,7 +234,7 @@ export const StationModal: React.FC<StationModalProps> = ({
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1">
                 <MapPin className="w-3.5 h-3.5 text-slate-400" />
                 <span>
-                  ถนน: {'road' in station && station.road ? station.road : 'ไม่มีข้อมูล'} • เขต: {station.district ? `เขต${station.district}` : 'ไม่มีข้อมูล'}
+                  ถนน: {'road' in station && station.road ? station.road : 'ไม่ระบุถนน'} • เขต: {station.district ? `เขต${station.district}` : 'ไม่ระบุเขต'}
                 </span>
               </p>
             </div>
@@ -190,7 +242,9 @@ export const StationModal: React.FC<StationModalProps> = ({
 
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+            aria-label="ปิดหน้ารายละเอียดสถานี (ESC)"
+            title="ปิดหน้ารายละเอียดสถานี (ESC)"
+            className="min-w-[44px] min-h-[44px] flex items-center justify-center p-2.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <X className="w-5 h-5" />
           </button>
@@ -199,56 +253,55 @@ export const StationModal: React.FC<StationModalProps> = ({
         {/* Content Body */}
         <div className="p-4 overflow-y-auto space-y-4">
           
-          {/* Key Metric Highlight Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {/* 1. Current Value */}
-            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
-                ระดับน้ำปัจจุบัน
-              </span>
-              <span className="text-2xl font-bold text-slate-900 dark:text-white mt-1 block">
-                {valueDisplay}
-              </span>
-              <span className="text-[10px] text-slate-400 block mt-0.5">
-                {isRoadFlood ? 'ระดับน้ำท่วมขังบนผิวถนน' : 'ระดับน้ำในคลองเทียบ รทก.'}
-              </span>
-            </div>
+          {/* 3-Second Summary Banner (ระดับน้ำ + แนวโน้ม + ประเมินสถานะ อ่านจบใน 3 วิ) */}
+          <div className="p-3.5 rounded-2xl bg-gradient-to-r from-blue-50/80 via-slate-50/70 to-slate-100/60 dark:from-blue-950/30 dark:via-slate-900/50 dark:to-slate-800/40 border border-blue-200/70 dark:border-blue-900/50 shadow-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 divide-y sm:divide-y-0 sm:divide-x divide-slate-200/80 dark:divide-slate-800">
+              
+              {/* 1. Current Water Level */}
+              <div className="sm:pr-3">
+                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">
+                  ระดับน้ำท่วมผิวถนน
+                </span>
+                <div className="flex items-baseline gap-1 mt-0.5">
+                  <span className="text-2xl sm:text-3xl font-extrabold text-rose-600 dark:text-rose-400">
+                    {'waterLevelCm' in station ? station.waterLevelCm : '-'}
+                  </span>
+                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400">ซม. (cm)</span>
+                </div>
+                <span className="text-[10px] text-slate-400 block mt-0.5">
+                  ความสดข้อมูล: {formatDataAge(station.dataAgeSeconds)}
+                </span>
+              </div>
 
-            {/* 2. Source Status (Raw) */}
-            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
-                สถานะจากระบบต้นทาง
-              </span>
-              <span className={`text-sm font-bold mt-1 block ${
-                sourceInfo.isError ? 'text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-slate-200'
-              }`}>
-                {sourceInfo.label}
-              </span>
-              <span className="text-[10px] text-slate-400 block mt-0.5 font-mono">
-                ค่าดิบ: {station.sourceStatus || 'ไม่มีข้อมูล'}
-              </span>
-            </div>
+              {/* 2. Trend Arrow */}
+              <div className="pt-2 sm:pt-0 sm:px-3">
+                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">
+                  แนวโน้มระดับน้ำ (Trend)
+                </span>
+                <div className="mt-1">
+                  {renderTrendBadge()}
+                </div>
+                <span className="text-[10px] text-slate-400 block mt-1">
+                  วิเคราะห์จากรอบตรวจวัดล่าสุด
+                </span>
+              </div>
 
-            {/* 3. App Calculated Level */}
-            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
-                ระดับที่แอปคำนวณ (เกณฑ์แอป)
-              </span>
-              <span className="text-base font-bold text-slate-900 dark:text-white mt-1 block">
-                {severity.label}
-              </span>
-              <span className="text-[10px] text-slate-400 block mt-0.5">
-                {APP_CALCULATION_EXPLANATION}
-              </span>
-            </div>
-          </div>
+              {/* 3. Status Assessment */}
+              <div className="pt-2 sm:pt-0 sm:pl-3">
+                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">
+                  การประเมินสถานะ
+                </span>
+                <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                  <span className={`px-2 py-0.5 rounded-md text-xs font-bold border ${severity.badgeClass}`}>
+                    {severity.label}
+                  </span>
+                </div>
+                <span className="text-[10px] text-slate-400 block mt-1">
+                  รายงานต้นทาง กทม.: <strong className="text-slate-700 dark:text-slate-300 font-medium">{sourceInfo.label}</strong>
+                </span>
+              </div>
 
-          {/* Trend Section */}
-          <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50/70 dark:bg-slate-800/30 border border-slate-200/60 dark:border-slate-800">
-            <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-              การวิเคราะห์แนวโน้มระดับน้ำ (Trend):
-            </span>
-            <div>{renderTrendBadge()}</div>
+            </div>
           </div>
 
           {/* Historical Graph Section */}
@@ -261,30 +314,47 @@ export const StationModal: React.FC<StationModalProps> = ({
                 </span>
               </div>
 
-              {/* Period Selectors */}
+              {/* Period Selectors: 6 ชม. / 12 ชม. / 24 ชม. */}
               <div className="flex items-center gap-1 text-[11px]">
                 {[
-                  { label: '1 ชม.', h: 1 },
-                  { label: '3 ชม.', h: 3 },
                   { label: '6 ชม.', h: 6 },
                   { label: '12 ชม.', h: 12 },
-                  { label: '24 ชม.', h: 24 },
-                  { label: '7 วัน', h: 168 }
-                ].map(p => (
-                  <button
-                    key={p.h}
-                    onClick={() => setPeriodHours(p.h)}
-                    className={`px-2 py-0.5 rounded-md font-medium transition ${
-                      periodHours === p.h
-                        ? 'bg-blue-600 text-white shadow-sm'
-                        : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600'
-                    }`}
-                  >
-                    {p.label}
-                  </button>
-                ))}
+                  { label: '24 ชม.', h: 24 }
+                ].map(p => {
+                  const isInsufficient = availableHours > 0 && availableHours < p.h * 0.4;
+                  return (
+                    <button
+                      key={p.h}
+                      disabled={isInsufficient}
+                      onClick={() => setPeriodHours(p.h)}
+                      aria-label={isInsufficient ? `ช่วงเวลา ${p.label} (ข้อมูลไม่เพียงพอ)` : `เลือกดูกราฟช่วงเวลา ${p.label}`}
+                      title={isInsufficient ? `ระบบมีข้อมูลสะสมประมาณ ${Math.round(availableHours)} ชม. (ยังไม่ถึง ${p.h} ชม.)` : `ดูกราฟย้อนหลัง ${p.label}`}
+                      className={`min-h-[44px] px-3.5 py-2 rounded-xl font-semibold text-xs transition focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        isInsufficient
+                          ? 'opacity-40 cursor-not-allowed bg-slate-100 dark:bg-slate-800 text-slate-400 border border-slate-200 dark:border-slate-700'
+                          : periodHours === p.h
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
+
+            {/* Note on data availability when limited */}
+            {availableHours > 0 && (
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 mb-2 flex items-center justify-between flex-wrap gap-1">
+                <span>
+                  มีข้อมูลย้อนหลังสะสม: <strong>{availableHours >= 1 ? `${Math.round(availableHours)} ชั่วโมง` : 'เพิ่งเริ่มบันทึก'}</strong>
+                </span>
+                <span className="text-[10px] text-slate-400">
+                  เริ่มเก็บตั้งแต่ {initialRecordDisplay}
+                </span>
+              </div>
+            )}
 
             {/* Recharts Chart or Not-Enough-Data Banner */}
             <div className="h-56 w-full">
@@ -294,19 +364,40 @@ export const StationModal: React.FC<StationModalProps> = ({
                 </div>
               ) : chartData.length >= 2 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <LineChart data={chartData} margin={{ top: 12, right: 15, left: -10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                    <XAxis dataKey="time" tick={{ fontSize: 10 }} />
-                    <YAxis tick={{ fontSize: 10 }} domain={['auto', 'auto']} />
+                    <XAxis
+                      dataKey="timestampMs"
+                      type="number"
+                      scale="time"
+                      domain={['dataMin', 'dataMax']}
+                      tickFormatter={(ms) => formatTimeOnly(new Date(ms))}
+                      tick={{ fontSize: 10 }}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 10 }}
+                      domain={['auto', 'auto']}
+                      unit={isRoadFlood ? ' ซม.' : ' ม.'}
+                    />
                     <Tooltip
                       content={({ active, payload }) => {
                         if (active && payload && payload.length) {
                           const data = payload[0].payload;
+                          if (data.value === null) {
+                            return (
+                              <div className="p-2 rounded-lg bg-slate-900 text-white text-xs shadow-lg border border-slate-800">
+                                <p className="text-slate-400">ไม่มีข้อมูลบันทึกในช่วงเวลานี้</p>
+                              </div>
+                            );
+                          }
                           return (
-                            <div className="p-2 rounded-lg bg-slate-900 text-white text-xs shadow-lg border border-slate-800">
-                              <p className="font-semibold">{data.fullTime}</p>
-                              <p className="text-blue-400 mt-0.5">
-                                ระดับน้ำ: {data.value} {isRoadFlood ? 'ซม.' : 'ม.'}
+                            <div className="p-2.5 rounded-lg bg-slate-900 text-white text-xs shadow-lg border border-slate-800">
+                              <p className="font-semibold text-slate-300">{data.fullTime}</p>
+                              <p className="text-blue-400 font-bold mt-1 text-sm">
+                                ระดับน้ำ: {data.value} {isRoadFlood ? 'ซม.' : 'ม.รทก.'}
+                              </p>
+                              <p className="text-[10px] text-slate-400 mt-0.5">
+                                (ค่าตรวจวัดจริงของเซนเซอร์ ไม่มีการประมาณค่า)
                               </p>
                             </div>
                           );
@@ -314,13 +405,51 @@ export const StationModal: React.FC<StationModalProps> = ({
                         return null;
                       }}
                     />
+                    {/* Threshold lines with explicit app/source attribution */}
+                    {isRoadFlood && (
+                      <>
+                        <ReferenceLine
+                          y={5}
+                          stroke="#f59e0b"
+                          strokeDasharray="4 4"
+                          label={{
+                            value: 'เกณฑ์แอป: เฝ้าระวัง (5 ซม.)',
+                            fill: '#d97706',
+                            fontSize: 9,
+                            position: 'insideTopLeft'
+                          }}
+                        />
+                        <ReferenceLine
+                          y={15}
+                          stroke="#ef4444"
+                          strokeDasharray="4 4"
+                          label={{
+                            value: 'เกณฑ์แอป: ท่วมสูง (15 ซม.)',
+                            fill: '#dc2626',
+                            fontSize: 9,
+                            position: 'insideTopLeft'
+                          }}
+                        />
+                      </>
+                    )}
+                    {/* Shaded gray areas for data gaps > 15 mins */}
+                    {gaps.map((g, idx) => (
+                      <ReferenceArea
+                        key={idx}
+                        x1={g.startMs}
+                        x2={g.endMs}
+                        fill="#64748b"
+                        fillOpacity={0.15}
+                      />
+                    ))}
                     <Line
-                      type="monotone"
+                      type="stepAfter"
                       dataKey="value"
                       stroke={isRoadFlood ? '#3b82f6' : '#06b6d4'}
-                      strokeWidth={2.5}
-                      dot={{ r: 3 }}
+                      strokeWidth={2}
+                      dot={{ r: 3, fill: isRoadFlood ? '#3b82f6' : '#06b6d4' }}
                       activeDot={{ r: 5 }}
+                      connectNulls={false}
                     />
                   </LineChart>
                 </ResponsiveContainer>
@@ -337,6 +466,16 @@ export const StationModal: React.FC<StationModalProps> = ({
                 </div>
               )}
             </div>
+
+            {/* Gap Info Banner */}
+            {gaps.length > 0 && (
+              <div className="mt-2.5 text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5 bg-slate-100/70 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-200/60 dark:border-slate-700/60">
+                <Info className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                <span>
+                  แถบสีเทาแสดงช่วงที่ไม่มีข้อมูลเกิน 15 นาที ({gaps.map(g => `${g.startLabel}-${g.endLabel}`).join(', ')}) กราฟตัดเส้นไม่ลากเชื่อม
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Full Detailed Station Attributes Grid */}

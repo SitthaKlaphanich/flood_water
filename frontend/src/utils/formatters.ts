@@ -12,22 +12,22 @@ export function formatDataAge(seconds?: number): string {
   return `${days} วันที่แล้ว`;
 }
 
-export function formatTimeOnly(isoString?: string): string {
-  if (!isoString) return '-';
+export function formatTimeOnly(isoOrDate?: string | number | Date): string {
+  if (!isoOrDate) return '-';
   try {
-    const d = new Date(isoString);
-    if (isNaN(d.getTime())) return isoString;
+    const d = isoOrDate instanceof Date ? isoOrDate : new Date(isoOrDate);
+    if (isNaN(d.getTime())) return String(isoOrDate);
     return d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   } catch {
-    return isoString;
+    return String(isoOrDate);
   }
 }
 
-export function formatDateTime(isoString?: string): string {
-  if (!isoString) return '-';
+export function formatDateTime(isoOrDate?: string | number | Date): string {
+  if (!isoOrDate) return '-';
   try {
-    const d = new Date(isoString);
-    if (isNaN(d.getTime())) return isoString;
+    const d = isoOrDate instanceof Date ? isoOrDate : new Date(isoOrDate);
+    if (isNaN(d.getTime())) return String(isoOrDate);
     return d.toLocaleString('th-TH', {
       year: 'numeric',
       month: 'short',
@@ -37,6 +37,6 @@ export function formatDateTime(isoString?: string): string {
       second: '2-digit'
     });
   } catch {
-    return isoString;
+    return String(isoOrDate);
   }
 }

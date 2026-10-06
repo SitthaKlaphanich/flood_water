@@ -217,7 +217,9 @@ export const CCTVModal: React.FC<CCTVModalProps> = ({ cctv, onClose }) => {
 
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+            aria-label="ปิดหน้าต่างกล้อง CCTV (ESC)"
+            title="ปิดหน้าต่างกล้อง CCTV (ESC)"
+            className="min-w-[44px] min-h-[44px] flex items-center justify-center p-2.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition focus:outline-none focus:ring-2 focus:ring-emerald-500"
           >
             <X className="w-5 h-5" />
           </button>
@@ -239,7 +241,8 @@ export const CCTVModal: React.FC<CCTVModalProps> = ({ cctv, onClose }) => {
             href={officialTargetUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex-shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-md shadow-blue-600/20 transition transform hover:-translate-y-0.5 active:translate-y-0"
+            aria-label="เปิดชมภาพสดจากเว็บไซต์ทางการ กทม. ในหน้าต่างใหม่"
+            className="flex-shrink-0 min-h-[44px] inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-md shadow-blue-600/20 transition transform hover:-translate-y-0.5 active:translate-y-0 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <span>เปิดกล้องเว็บต้นทาง กทม.</span>
             <ExternalLink className="w-3.5 h-3.5" />
